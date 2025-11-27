@@ -7,7 +7,9 @@ import {
   PreTrainedTokenizer,
 } from "@huggingface/transformers";
 import { type FC, type ReactElement, useRef, useState } from "react";
+import { useNavigate } from "react-router";
 
+import { Category, Color, Size } from "../../store/products.ts";
 import usePageContext from "../../store/provider/pageContext/usePageContext.ts";
 import { Loader } from "../../theme";
 import cn from "../../utils/classnames.ts";
@@ -34,6 +36,8 @@ const Chat: FC = () => {
     []
   );
 
+  const navigate = useNavigate();
+
   const tools: Array<WebMCPTool> = [
     {
       name: "get_page_context",
@@ -53,6 +57,46 @@ const Chat: FC = () => {
         return `Current Page: ${pageContext.title}
 
   ${pageContext.content}`;
+      },
+    },
+    {
+      name: "open_product_overview",
+      description: "Opens a product overview with a given set of filters",
+      inputSchema: {
+        type: "object",
+        properties: {
+          categories: {
+            type: "string",
+            description: `Can be one of the following values: ${Object.values(Category).join(", ")}`,
+            default: "",
+          },
+          colors: {
+            type: "string",
+            description: `Can be one of the following values: ${Object.values(Color).join(", ")}`,
+            default: "",
+          },
+          sizes: {
+            type: "string",
+            description: `Can be one of the following values: ${Object.values(Size).join(", ")}`,
+            default: "",
+          },
+        },
+        required: [],
+      },
+      execute: async (args: Record<string, any>) => {
+        const query = Object.entries(args)
+          .filter(([, value]) => value)
+          .map(([key, value]) =>
+            value
+              .split(",")
+              .map((value: string) => `${key}=${value.trim()}`)
+              .join("&")
+          )
+          .join("&");
+
+        navigate(`/products?${query}`);
+
+        return `Tell the user you navigated to the product overview with "${query}"`;
       },
     },
   ];
