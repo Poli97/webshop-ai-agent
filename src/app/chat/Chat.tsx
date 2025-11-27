@@ -6,6 +6,7 @@ import {
 } from "@huggingface/transformers";
 import { type FC, type ReactElement, useRef, useState } from "react";
 
+import usePageContext from "../../store/provider/pageContext/usePageContext.ts";
 import { Loader } from "../../theme";
 import cn from "../../utils/classnames.ts";
 import mdToHtml from "../../utils/converter/mdToHtml.ts";
@@ -20,37 +21,57 @@ const Chat: FC = () => {
   const [callbackElements, setCallbackElements] = useState<Array<ReactElement>>(
     []
   );
+  const { pageContext } = usePageContext();
+
+  const [conversation, setConversation] = useState<Array<Message>>([]);
 
   const pipe = useRef<TextGenerationPipeline | null>(null);
 
   const onAskLLM = async (question: string): Promise<string> => {
-    const model = MODELS.granite1B;
+    const model = MODELS.granite3B;
+
+    const messages = conversation;
+
+    if (messages.length == 0) {
+      messages.push({
+        role: "system",
+        content: `${SYSTEM_PROMPT}
+  Current Page: ${pageContext.title}
+  ${pageContext.content}
+  `,
+      });
+    }
+
+    messages.push({
+      role: "user",
+
+      content: question,
+    });
+
     if (!pipe.current) {
       pipe.current = await pipeline("text-generation", model.modelId, {
         device: model.device,
+
         dtype: model.dtype,
+
         progress_callback: console.log,
       });
     }
 
-    const messages: Array<Message> = [
-      {
-        role: "system",
-        content: SYSTEM_PROMPT,
-      },
-      {
-        role: "user",
-        content: question,
-      },
-    ];
+    console.log(messages);
 
-    //max_new_tokens should be larger then the number of tokens you expect in the response
-    const resp = await pipe.current(messages, {
-      max_new_tokens: 1024,
-    });
+    const resp = await pipe.current(messages, { max_new_tokens: 1000 });
 
-    //@ts-expect-error transformer.js types issue
-    return resp[0].generated_text.pop().content;
+    console.log(resp);
+
+    //@ts-expect-error transformers.js type issues
+    const response = resp[0].generated_text.pop().content;
+
+    messages.push({ role: "assistant", content: response });
+
+    setConversation(messages);
+
+    return response;
   };
 
   return (
