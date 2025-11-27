@@ -21,6 +21,7 @@ import {
   extractToolCalls,
   webMCPToolToChatTemplateTool,
 } from "../../utils/llm/webMcp.ts";
+import findSimilarFAQs from "../../utils/vectorSearch/findSimilarFAQs.ts";
 import ChatForm from "./ChatForm.tsx";
 
 const Chat: FC = () => {
@@ -97,6 +98,28 @@ const Chat: FC = () => {
         navigate(`/products?${query}`);
 
         return `Tell the user you navigated to the product overview with "${query}"`;
+      },
+    },
+    {
+      name: "search_faqs",
+      description:
+        "IF the user ask a general question about the store, search fr the right answer in the FAQs",
+      inputSchema: {
+        type: "object",
+        properties: {
+          question: {
+            type: "string",
+            description: "The question to search for in the FAQs",
+            default: "",
+          },
+        },
+        required: ["question"],
+      },
+      execute: async (args: Record<string, any>) => {
+        const { question } = args;
+
+        const faqs = await findSimilarFAQs(question);
+        return `Here are more information to answer the question:\n${faqs.join("\n")}`;
       },
     },
   ];
