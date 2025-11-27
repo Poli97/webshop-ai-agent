@@ -13,6 +13,10 @@ import { Loader } from "../../theme";
 import cn from "../../utils/classnames.ts";
 import mdToHtml from "../../utils/converter/mdToHtml.ts";
 import { MODELS, SYSTEM_PROMPT } from "../../utils/llm/constants.ts";
+import {
+  WebMCPTool,
+  webMCPToolToChatTemplateTool,
+} from "../../utils/llm/webMcp.ts";
 import ChatForm from "./ChatForm.tsx";
 
 const Chat: FC = () => {
@@ -23,14 +27,32 @@ const Chat: FC = () => {
   const [callbackElements, setCallbackElements] = useState<Array<ReactElement>>(
     []
   );
-  const { pageContext } = usePageContext();
 
   const [conversation, setConversation] = useState<Array<Message>>([]);
+
+  const tools: Array<WebMCPTool> = [
+    {
+      name: "get_page_context",
+      description:
+        "Get the current page context. Often the user navigates through the page so use this tool each time the user requests information about the current page or item",
+      inputSchema: {
+        type: "object",
+        properties: {},
+        required: [],
+      },
+      execute: async () => {
+        return `Current Page: ${pageContext.title}
+                  ${pageContext.content}`;
+      },
+    },
+  ];
 
   const pipe = useRef<{
     tokenizer: PreTrainedTokenizer;
     model: PreTrainedModel;
   }>(null);
+
+  const { pageContext } = usePageContext();
 
   const onAskLLM = async (question: string): Promise<string> => {
     const model = MODELS.granite3B;
@@ -40,16 +62,12 @@ const Chat: FC = () => {
     if (messages.length == 0) {
       messages.push({
         role: "system",
-        content: `${SYSTEM_PROMPT}
-  Current Page: ${pageContext.title}
-  ${pageContext.content}
-  `,
+        content: SYSTEM_PROMPT,
       });
     }
 
     messages.push({
       role: "user",
-
       content: question,
     });
 
@@ -70,7 +88,7 @@ const Chat: FC = () => {
     }
 
     const input: any = pipe.current.tokenizer.apply_chat_template(messages, {
-      tools: [],
+      tools: tools.map(webMCPToolToChatTemplateTool),
       add_generation_prompt: true,
       return_dict: true,
     });
@@ -84,16 +102,13 @@ const Chat: FC = () => {
     console.log(messages);
 
     const lengthOfInput: number = input.input_ids_dims[1];
-    const resp = pipe.current.tokenizer.batch_decode(
+    const response = pipe.current.tokenizer.batch_decode(
       sequences.slice(null, [lengthOfInput, Number.MAX_SAFE_INTEGER], {
         skip_special_tokens: true,
       })
-    );
+    )[0];
 
-    console.log(resp);
-
-    //@ts-expect-error transformers.js type issues
-    const response = resp[0].generated_text.pop().content;
+    console.log(response);
 
     messages.push({ role: "assistant", content: response });
 
