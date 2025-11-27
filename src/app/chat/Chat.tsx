@@ -1,9 +1,15 @@
 import { SparklesIcon, XMarkIcon } from "@heroicons/react/24/outline";
-import { type FC, type ReactElement, useState } from "react";
+import {
+  Message,
+  TextGenerationPipeline,
+  pipeline,
+} from "@huggingface/transformers";
+import { type FC, type ReactElement, useRef, useState } from "react";
 
 import { Loader } from "../../theme";
 import cn from "../../utils/classnames.ts";
 import mdToHtml from "../../utils/converter/mdToHtml.ts";
+import { MODELS, SYSTEM_PROMPT } from "../../utils/llm/constants.ts";
 import ChatForm from "./ChatForm.tsx";
 
 const Chat: FC = () => {
@@ -15,8 +21,36 @@ const Chat: FC = () => {
     []
   );
 
+  const pipe = useRef<TextGenerationPipeline | null>(null);
+
   const onAskLLM = async (question: string): Promise<string> => {
-    return question;
+    const model = MODELS.granite1B;
+    if (!pipe.current) {
+      pipe.current = await pipeline("text-generation", model.modelId, {
+        device: model.device,
+        dtype: model.dtype,
+        progress_callback: console.log,
+      });
+    }
+
+    const messages: Array<Message> = [
+      {
+        role: "system",
+        content: SYSTEM_PROMPT,
+      },
+      {
+        role: "user",
+        content: question,
+      },
+    ];
+
+    //max_new_tokens should be larger then the number of tokens you expect in the response
+    const resp = await pipe.current(messages, {
+      max_new_tokens: 1024,
+    });
+
+    //@ts-expect-error transformer.js types issue
+    return resp[0].generated_text.pop().content;
   };
 
   return (
