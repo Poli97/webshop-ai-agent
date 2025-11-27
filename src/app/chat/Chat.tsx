@@ -1,8 +1,10 @@
 import { SparklesIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import {
+  AutoModel,
+  AutoTokenizer,
   Message,
-  TextGenerationPipeline,
-  pipeline,
+  PreTrainedModel,
+  PreTrainedTokenizer,
 } from "@huggingface/transformers";
 import { type FC, type ReactElement, useRef, useState } from "react";
 
@@ -25,7 +27,10 @@ const Chat: FC = () => {
 
   const [conversation, setConversation] = useState<Array<Message>>([]);
 
-  const pipe = useRef<TextGenerationPipeline | null>(null);
+  const pipe = useRef<{
+    tokenizer: PreTrainedTokenizer;
+    model: PreTrainedModel;
+  }>(null);
 
   const onAskLLM = async (question: string): Promise<string> => {
     const model = MODELS.granite3B;
@@ -49,18 +54,41 @@ const Chat: FC = () => {
     });
 
     if (!pipe.current) {
-      pipe.current = await pipeline("text-generation", model.modelId, {
-        device: model.device,
+      const tokenizer = await AutoTokenizer.from_pretrained(model.modelId);
+      const pretrainedModel: PreTrainedModel = await AutoModel.from_pretrained(
+        model.modelId,
+        {
+          device: model.device,
+          dtype: model.dtype,
+        }
+      );
 
-        dtype: model.dtype,
-
-        progress_callback: console.log,
-      });
+      pipe.current = {
+        tokenizer,
+        model: pretrainedModel,
+      };
     }
+
+    const input: any = pipe.current.tokenizer.apply_chat_template(messages, {
+      tools: [],
+      add_generation_prompt: true,
+      return_dict: true,
+    });
+
+    const { sequences }: any = await pipe.current.model.generate({
+      ...input,
+      max_new_tokens: 1000,
+      return_dict_in_generate: true,
+    });
 
     console.log(messages);
 
-    const resp = await pipe.current(messages, { max_new_tokens: 1000 });
+    const lengthOfInput: number = input.input_ids_dims[1];
+    const resp = pipe.current.tokenizer.batch_decode(
+      sequences.slice(null, [lengthOfInput, Number.MAX_SAFE_INTEGER], {
+        skip_special_tokens: true,
+      })
+    );
 
     console.log(resp);
 
